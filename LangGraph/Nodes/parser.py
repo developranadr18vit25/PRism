@@ -1,24 +1,24 @@
 from pydantic import BaseModel
 from workFlow import PR_State
-from typing import List , TypedDict
-from helper import make_js_tree , find_function_calls , get_language
+from typing import List
+from helper import get_language
 
-def parser_node(state:PR_State)->dict:
+
+def parser_node(state: PR_State) -> dict:
 
     class ChangedFile(BaseModel):
 
-        filename:str
-        language:str
-        status:str
-        additions:int
-        deletions:int
-        changes:int
-        patch:str
+        filename: str
+        language: str
+        status: str
+        additions: int
+        deletions: int
+        changes: int
+        patch: str
 
     class ParsedPR(BaseModel):
 
         changed_files: List[ChangedFile]
-        
 
     def parse_pr_diff(raw_diff):
 
@@ -40,6 +40,11 @@ def parser_node(state:PR_State)->dict:
 
         return ParsedPR(changed_files=changed_files)
 
+    parsed_pr = parse_pr_diff(state["raw_diff"])
+
     return {
-        "parsed_data":parse_pr_diff(state["raw_diff"])
+        "parsed_data": [
+            file.model_dump()
+            for file in parsed_pr.changed_files
+        ]
     }
