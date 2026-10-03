@@ -6,7 +6,7 @@
 
 The name **PRism** comes from the idea of looking at a Pull Request through **multiple perspectives**, where different stages of the system analyze different aspects of the code before arriving at a final review decision.
 
-### 🤖 Agentic AI Workflow
+### Agentic AI Workflow
 
 The core of PRism is an **agentic AI workflow** built using **LangGraph and LangChain**.
 
