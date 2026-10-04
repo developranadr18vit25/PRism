@@ -5,3 +5,4 @@ package-lock.json
 .venv
 connect.js
 repos
+backend/chroma-db/
