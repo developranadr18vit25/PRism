@@ -1,6 +1,9 @@
 import os 
 from dotenv import load_dotenv
+from fastapi import FastAPI
 load_dotenv()
+
+app=FastAPI()
 
 from langchain_mistralai import ChatMistralAI , MistralAIEmbeddings
 from langgraph.graph import StateGraph
@@ -20,26 +23,22 @@ vector_store = Chroma(
 
 class PR_State(TypedDict):
 
-    raw_diff: List[dict]
-    parsed_data:List[dict]
-    repo_path:str
-    pr_number:str
-    target_branch:str
-    file_code:List[dict]
-
-    repo_Context:List[dict]
-
-    code_analysis:dict
-    merge_analysis:dict
-    isConflict:bool
-    conflict_analysis:List[dict]
-    security_analysis:dict
+    pr_Files:List[dict]
     
 
-    risk_score:int
+@app.post("/review")
 
-    final_decision:str
-    final_review:dict
+def review_pr(data: PR_State):
+
+    initial_state = {
+        "pr_Files": data["pr_Files"]
+    }
+
+    print(initial_state)
+
+    # result = graph.invoke(initial_state)
+
+    return initial_state
 
 
     
