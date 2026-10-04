@@ -4,7 +4,9 @@ require("dotenv").config()
 const clientId = process.env.GITHUB_CLIENT_ID;
 const clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
-const getGitAccess_Token = async (code) => {
+const getGitAccess_Token = async (code) => { 
+
+    // FOR SENDING THE TEMP TOKEN AND GETTING THE ACCESS TOKEN  
 
     const response = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",

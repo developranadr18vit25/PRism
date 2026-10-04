@@ -2,7 +2,6 @@ const mongoose = require("mongoose")
 const { currUser } = require("../Database/schema")
 const axios = require("axios")
 
-
 const fetchUserDetails = (async (req, res) => {
 
     const token = req.cookies.github_access_token;

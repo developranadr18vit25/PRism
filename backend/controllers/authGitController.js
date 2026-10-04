@@ -8,10 +8,13 @@ const gitAuthorization = ((req, res) => {
 
     console.log("Client ID:", process.env.GITHUB_CLIENT_ID);
 
-
     const gitAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=http://localhost:4000/auth/github/callback&scope=repo&state=random123`;
 
     res.redirect(gitAuthUrl)
+
+    // return res.json({
+    //     Message:"Temporary token fetched from github"
+    // })
 });
 
 const gitTempToken = (async (req, res ,next) => {
