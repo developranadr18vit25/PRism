@@ -7,7 +7,7 @@ const { Document } = require("@langchain/core/documents");
 const { MistralAIEmbeddings } = require("@langchain/mistralai");
 const { Chroma } = require("@langchain/community/vectorstores/chroma");
 
-const storeRepoData = (async (req, res) => {
+const storeRepoData = (async (req, res, next) => {
 
     try {
 
@@ -80,10 +80,7 @@ const storeRepoData = (async (req, res) => {
             }
         );
 
-        res.json({
-            message: "Repository embedded successfully",
-            files: documents.length
-        });
+        next();
 
     } catch (error) {
 

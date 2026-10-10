@@ -24,6 +24,11 @@ vector_store = Chroma(
 class PR_State(TypedDict):
 
     pr_Files:List[dict]
+    single_file_logic_test_Results:List[dict]
+    
+    
+    
+
     
 
 @app.post("/review")
@@ -35,8 +40,6 @@ def review_pr(data: PR_State):
     }
 
     print(initial_state)
-
-    # result = graph.invoke(initial_state)
 
     return initial_state
 
