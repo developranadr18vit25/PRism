@@ -20,12 +20,15 @@ REPO_PATH = os.getenv("REPO_PATH")
 BASE_SHA = os.getenv("BASE_SHA")
 
 
+
 def run_semgrep(file_path):
     try:
         result = subprocess.run(
             [
+                "docker", "exec",
+                SEMGREP_CONTAINER,
                 "semgrep", "scan",
-                "--config", "auto",  #GENERAL TEST
+                "--config", "auto",
                 "--json",
                 "--no-git-ignore",
                 file_path
@@ -38,7 +41,7 @@ def run_semgrep(file_path):
         if result.returncode not in (0, 1):
             return {
                 "status": "failed",
-                "error": result.stderr
+                "error": result.stderr or result.stdout
             }
 
         data = json.loads(result.stdout)
@@ -59,17 +62,24 @@ def run_semgrep(file_path):
             "findings": findings
         }
 
-    except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+    except subprocess.TimeoutExpired as e:
         return {
             "status": "failed",
-            "error": str(e)
+            "error": f"Semgrep Docker scan timed out: {e}"
+        }
+
+    except json.JSONDecodeError as e:
+        return {
+            "status": "failed",
+            "error": f"Invalid JSON from Semgrep: {e}"
         }
 
     except FileNotFoundError:
         return {
             "status": "failed",
-            "error": "Semgrep is not installed or not available in PATH."
+            "error": "Docker is not installed or unavailable in PATH."
         }
+
 
 
 def analyze_logic_with_llm(

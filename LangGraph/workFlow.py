@@ -25,6 +25,7 @@ class PR_State(TypedDict):
 
     pr_Files:List[dict]
     single_file_logic_test_Results:List[dict]
+    single_file_security_test_Results:List[dict]
     
     
     
