@@ -27,17 +27,18 @@ class PR_State(TypedDict):
     single_file_logic_test_Results:List[dict]
     single_file_security_test_Results:List[dict]
     
+class PRRequest(BaseModel):
+    pr_Files: List[dict]
     
     
-
-    
-
 @app.post("/review")
 
-def review_pr(data: PR_State):
+def review_pr(data: PRRequest):
 
-    initial_state = {
-        "pr_Files": data["pr_Files"]
+    initial_state: PR_State = {
+        "pr_Files": data.pr_Files,
+        "single_file_logic_test_Results": [],
+        "single_file_security_test_Results": []
     }
 
     print(initial_state)

@@ -25,8 +25,15 @@ const cloneRepo = async (req, res) => {
         res.json({ repoPath });
 
     } catch (error) {
-        res.status(500).json({ message: "Failed to clone repository" });
+        console.error("Clone error:", error);
+        console.error("Git stderr:", error.stderr);
+
+        res.status(500).json({
+            message: "Failed to clone repository",
+            error: error.message,
+            details: error.stderr
+        });
     }
 };
 
-module.exports={cloneRepo}
+module.exports = { cloneRepo }
