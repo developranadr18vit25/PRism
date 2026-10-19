@@ -1,0 +1,142 @@
+
+rules:
+  - id: js-assignment-in-condition
+    languages:
+      - javascript
+    message: "Assignment in a condition may be accidental. Check whether a comparison was intended."
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          if ($X = $Y) {
+            ...
+          }
+      - pattern: |
+          while ($X = $Y) {
+            ...
+          }
+    metadata:
+      category: logic
+      confidence: MEDIUM
+
+  - id: python-walrus-in-condition
+    languages:
+      - python
+    message: "Check whether this assignment expression in a condition is intentional."
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          if ($X := $Y):
+            ...
+      - pattern: |
+          while ($X := $Y):
+            ...
+    metadata:
+      category: logic
+      confidence: LOW
+
+  - id: js-self-comparison
+    languages:
+      - javascript
+    message: "A variable is compared with itself. Check for a possible logic error."
+    severity: WARNING
+    pattern-either:
+      - pattern: $X === $X
+      - pattern: $X == $X
+    metadata:
+      category: logic
+      confidence: MEDIUM
+
+  - id: python-self-comparison
+    languages:
+      - python
+    message: "A variable is compared with itself. Check for a possible logic error."
+    severity: WARNING
+    pattern-either:
+      - pattern: $X == $X
+      - pattern: $X is $X
+    metadata:
+      category: logic
+      confidence: MEDIUM
+
+  - id: js-constant-condition
+    languages:
+      - javascript
+    message: "This condition uses a constant boolean. Check whether it is intentional."
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          if (true) {
+            ...
+          }
+      - pattern: |
+          if (false) {
+            ...
+          }
+      - pattern: |
+          while (false) {
+            ...
+          }
+    metadata:
+      category: logic
+      confidence: LOW
+
+  - id: python-constant-condition
+    languages:
+      - python
+    message: "This condition uses a constant boolean. Check whether it is intentional."
+    severity: WARNING
+    pattern-either:
+      - pattern: |
+          if True:
+            ...
+      - pattern: |
+          if False:
+            ...
+      - pattern: |
+          while False:
+            ...
+    metadata:
+      category: logic
+      confidence: LOW
+
+  - id: js-empty-catch
+    languages:
+      - javascript
+    message: "This catch block ignores errors. Check whether error handling is needed."
+    severity: WARNING
+    pattern: |
+      try {
+        ...
+      } catch ($ERR) {
+      }
+    metadata:
+      category: error-handling
+      confidence: MEDIUM
+
+  - id: python-empty-except
+    languages:
+      - python
+    message: "This exception handler ignores errors. Check whether error handling is needed."
+    severity: WARNING
+    pattern: |
+      try:
+        ...
+      except $ERR:
+        pass
+    metadata:
+      category: error-handling
+      confidence: MEDIUM
+
+  - id: js-nan-equality
+    languages:
+      - javascript
+    message: "NaN cannot be reliably checked with equality. Use Number.isNaN() instead."
+    severity: ERROR
+    pattern-either:
+      - pattern: $X === NaN
+      - pattern: $X == NaN
+      - pattern: NaN === $X
+      - pattern: NaN == $X
+    metadata:
+      category: correctness
+      confidence: HIGH

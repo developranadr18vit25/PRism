@@ -31,7 +31,7 @@ SEMGREP_IMAGE = os.getenv(
 # worktree_path = "/var/folders/sb/0dh9kxt13p13p7n5_tpnj1680000gn/T/pr-2-3mjmj2le"
 
 
-def run_semgrep(worktree_path):
+def run_semgrep(worktree_path , filename):
     client = None
     container = None
 
@@ -39,19 +39,25 @@ def run_semgrep(worktree_path):
         client = docker.from_env(timeout=180)
         client.ping()
 
+        
         container = client.containers.run(
             image=SEMGREP_IMAGE,
             command=[
                 "semgrep",
                 "scan",
                 "--config", "auto",
+                "--config", "/rules/logic_rules.yml",
                 "--json",
                 "--no-git-ignore",
-                "/workspace/repo"
+                f"/workspace/repo/{filename}"
             ],
             volumes={
                 os.path.abspath(worktree_path): {
                     "bind": "/workspace/repo",
+                    "mode": "ro"
+                },
+                os.path.abspath("../Custom/Checks/logic_rules.yml"): {
+                    "bind": "/rules/logic_rules.yml",
                     "mode": "ro"
                 }
             },
@@ -60,6 +66,7 @@ def run_semgrep(worktree_path):
             mem_limit="1g",
             network_mode="bridge"
         )
+
 
         result = container.wait(timeout=180)
 
@@ -218,18 +225,21 @@ def main_logic_analysis(worktree_path, changed_files, base_sha):
     results = []
 
     try:
-        semgrep_result = run_semgrep(worktree_path)
 
-        if semgrep_result["status"] == "failed":
-            return {
+        for filename in changed_files:
+            
+            semgrep_result = run_semgrep(worktree_path,filename)
+            
+            if semgrep_result["status"] == "failed":
+                return {
+                "filename":filename,
                 "status": "failed",
                 "error": semgrep_result["error"],
                 "results": []
             }
-
-        all_findings = semgrep_result.get("findings", [])
-
-        for filename in changed_files:
+                
+            all_findings = semgrep_result.get("findings", [])
+            
             original_result = subprocess.run(
                 [
                     "git",
@@ -279,6 +289,7 @@ def main_logic_analysis(worktree_path, changed_files, base_sha):
             results.append(analysis)
 
         return {
+            "filename":filename,
             "status": "completed",
             "total_files": len(changed_files),
             "results": results
@@ -286,6 +297,7 @@ def main_logic_analysis(worktree_path, changed_files, base_sha):
 
     except Exception as e:
         return {
+            "filename":filename,
             "status": "failed",
             "error": str(e),
             "results": results

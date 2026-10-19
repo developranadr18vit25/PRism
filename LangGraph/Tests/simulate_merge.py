@@ -218,7 +218,3 @@ def simulate_merge():
             "analysis_stopped": True
         }
 
-
-
-result = simulate_merge()
-print(result)

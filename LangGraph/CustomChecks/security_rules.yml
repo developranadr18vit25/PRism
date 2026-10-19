@@ -1,0 +1,101 @@
+
+rules:
+  - id: python-dangerous-eval
+    languages:
+      - python
+    message: Avoid eval() on potentially untrusted input because it can execute arbitrary code.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-95"
+    pattern: eval($INPUT)
+
+  - id: python-dangerous-exec
+    languages:
+      - python
+    message: exec() can execute arbitrary code; validate the input and avoid dynamic execution.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-95"
+    pattern: exec($INPUT)
+
+  - id: python-shell-true
+    languages:
+      - python
+    message: subprocess with shell=True can introduce command injection when arguments contain untrusted input.
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-78"
+    patterns:
+      - pattern: subprocess.$FUNC(..., shell=True, ...)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "^(run|Popen|call|check_call|check_output)$"
+
+  - id: python-pickle-untrusted-data
+    languages:
+      - python
+    message: pickle deserialization can execute code if the data is untrusted.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-502"
+    pattern-either:
+      - pattern: pickle.loads($DATA)
+      - pattern: pickle.load($FILE)
+
+  - id: python-hardcoded-secret
+    languages:
+      - python
+    message: Possible hardcoded credential in source code.
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-798"
+    pattern-regex: '(?i)(password|passwd|api_key|secret|access_token)\s*=\s*["\x27][^"\x27]{8,}["\x27]'
+
+  - id: javascript-eval
+    languages:
+      - javascript
+      - typescript
+    message: eval() can execute arbitrary JavaScript and may enable code injection.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-95"
+    pattern: eval($INPUT)
+
+  - id: javascript-innerhtml
+    languages:
+      - javascript
+      - typescript
+    message: Assigning potentially untrusted data to innerHTML can cause cross-site scripting.
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-79"
+    pattern: $EL.innerHTML = $INPUT
+
+  - id: javascript-document-write
+    languages:
+      - javascript
+      - typescript
+    message: document.write() with untrusted data can cause cross-site scripting.
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-79"
+    pattern: document.write($INPUT)
+
+  - id: javascript-hardcoded-secret
+    languages:
+      - javascript
+      - typescript
+    message: Possible hardcoded credential in source code.
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-798"
+    pattern-regex: '(?i)(password|passwd|api_key|secret|access_token)\s*[:=]\s*["\x27][^"\x27]{8,}["\x27]'

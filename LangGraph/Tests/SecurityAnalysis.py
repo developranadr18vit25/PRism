@@ -1,10 +1,12 @@
-
 import json
 import subprocess
 import os
+import docker
+from docker.errors import DockerException
 
 from dotenv import load_dotenv
 from langchain_mistralai import ChatMistralAI
+
 
 from workFlow import PR_State
 
@@ -17,31 +19,68 @@ llm = ChatMistralAI(
 
 REPO_PATH = os.getenv("REPO_PATH")
 BASE_SHA = os.getenv("BASE_SHA")
-WORKTREE_PATH = os.getenv("WORKTREE_PATH")
+# WORKTREE_PATH = os.getenv("WORKTREE_PATH")
+SEMGREP_IMAGE = os.getenv(
+    "SEMGREP_IMAGE",
+    "semgrep/semgrep:latest"
+)
 
 
-def run_semgrep_security(file_path):
+def run_semgrep_security(worktree_path, filename):
+    client = None
+    container = None
+
     try:
-        result = subprocess.run(
-            [
-                "semgrep", "scan",
-                "--config", "p/security-audit",  # FOCUSED ON SECURITY
+        client = docker.from_env()
+
+        container = client.containers.run(
+            image=SEMGREP_IMAGE,
+            command=[
+                "semgrep",
+                "scan",
+                "--config", "p/security-audit",
+                "--config", "/rules/security_rules.yml",
                 "--json",
+                "--quiet",
                 "--no-git-ignore",
-                file_path
+                f"/workspace/repo/{filename}"
             ],
-            capture_output=True,
-            text=True,
-            timeout=120
+            volumes={
+                os.path.abspath(worktree_path): {
+                    "bind": "/workspace/repo",
+                    "mode": "ro"
+                },
+                os.path.abspath("../Custom/Checks/security_rules.yml"): {
+                    "bind": "/rules/security_rules.yml",
+                    "mode": "ro"
+                }
+            },
+            working_dir="/workspace/repo",
+            detach=True,
+            mem_limit="1g",
+            network_mode="bridge"
         )
 
-        if result.returncode not in (0, 1):
+        exit_result = container.wait(timeout=120)
+        exit_code = exit_result.get("StatusCode", -1)
+
+        stdout = container.logs(
+            stdout=True,
+            stderr=False
+        ).decode("utf-8", errors="replace")
+
+        stderr = container.logs(
+            stdout=False,
+            stderr=True
+        ).decode("utf-8", errors="replace")
+
+        if exit_code not in (0, 1):
             return {
                 "status": "failed",
-                "error": result.stderr or result.stdout
+                "error": stderr or stdout or f"Semgrep exited with code {exit_code}"
             }
 
-        data = json.loads(result.stdout)
+        data = json.loads(stdout)
         findings = []
 
         for finding in data.get("results", []):
@@ -49,6 +88,7 @@ def run_semgrep_security(file_path):
 
             findings.append({
                 "rule_id": finding.get("check_id"),
+                "path": finding.get("path"),
                 "message": extra.get("message"),
                 "severity": extra.get("severity"),
                 "start_line": finding.get("start", {}).get("line"),
@@ -62,17 +102,21 @@ def run_semgrep_security(file_path):
             "findings": findings
         }
 
-    except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+    except Exception as e:
         return {
             "status": "failed",
             "error": str(e)
         }
 
-    except FileNotFoundError:
-        return {
-            "status": "failed",
-            "error": "Semgrep is not installed or not available in PATH."
-        }
+    finally:
+        if container is not None:
+            try:
+                container.remove(force=True)
+            except DockerException:
+                pass
+
+        if client is not None:
+            client.close()
 
 
 def analyze_security_with_llm(
@@ -182,90 +226,43 @@ SEMGREP SECURITY FINDINGS:
     }
 
 
-def Single_File_Security_Test(state: PR_State):
-    pr_files = state["pr_Files"]
-
+def Single_File_Security_Test(worktree_path, changed_files):
     single_file_security_test_results = []
 
-    if not REPO_PATH or not BASE_SHA or not WORKTREE_PATH:
-        raise ValueError(
-            "Set REPO_PATH, BASE_SHA and WORKTREE_PATH in .env."
-        )
+    if not REPO_PATH or not BASE_SHA or not worktree_path:
+        raise ValueError("Set REPO_PATH and BASE_SHA in .env and pass worktree_path.")
 
     if not os.path.isdir(REPO_PATH):
-        raise ValueError(
-            "REPO_PATH must point to a local Git repository."
-        )
+        raise ValueError("REPO_PATH must point to a local Git repository.")
 
-    if not os.path.isdir(WORKTREE_PATH):
-        raise ValueError(
-            "WORKTREE_PATH must point to the existing worktree."
-        )
+    worktree_path = os.path.abspath(worktree_path)
 
-    if not os.path.isdir(os.path.join(WORKTREE_PATH, ".git")):
-        if not os.path.isfile(os.path.join(WORKTREE_PATH, ".git")):
-            raise ValueError(
-                "WORKTREE_PATH is not a valid Git worktree."
-            )
+    if not os.path.isdir(worktree_path):
+        raise ValueError("WORKTREE_PATH must point to the existing merged worktree.")
 
-    for file in pr_files:
+    for file in changed_files:
         filename = file["filename"]
-        patch = file.get("patch")
         status = file.get("status", "modified")
 
         try:
             if (
-                os.path.isabs(filename)
+                not filename
+                or os.path.isabs(filename)
                 or ".." in filename.split("/")
                 or "\\" in filename
             ):
-                raise ValueError(
-                    "Invalid repository-relative filename."
-                )
+                raise ValueError("Invalid repository-relative filename.")
 
-            if not patch:
-                single_file_security_test_results.append({
-                    "filename": filename,
-                    "status": "skipped",
-                    "vulnerability": "Patch unavailable",
-                    "severity_score": 0,
-                    "possible_lines": [],
-                    "explanation": "Semgrep and LLM analysis were skipped.",
-                    "suggested_fix": "Retrieve the full diff for this file."
-                })
-                continue
-
-            subprocess.run(
-                [
-                    "git", "-C", WORKTREE_PATH,
-                    "reset", "--hard", BASE_SHA
-                ],
-                check=True,
+            original_result = subprocess.run(
+                ["git", "show", f"{BASE_SHA}:{filename}"],
+                cwd=REPO_PATH,
                 capture_output=True,
                 text=True,
                 timeout=30
             )
 
-            subprocess.run(
-                [
-                    "git", "-C", WORKTREE_PATH,
-                    "clean", "-fd"
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            original_file_path = os.path.join(
-                WORKTREE_PATH, filename
-            )
-
-            if os.path.isfile(original_file_path):
-                with open(
-                    original_file_path, "r", encoding="utf-8"
-                ) as f:
-                    original_code = f.read()
+            if original_result.returncode == 0:
+                original_code = original_result.stdout
             elif status == "added":
                 original_code = ""
             else:
@@ -275,72 +272,15 @@ def Single_File_Security_Test(state: PR_State):
                     "vulnerability": "Original file not found",
                     "severity_score": 0,
                     "possible_lines": [],
-                    "explanation": "The file was not found at BASE_SHA.",
+                    "explanation": original_result.stderr,
                     "suggested_fix": "Verify the filename and base commit."
                 })
                 continue
 
-            patch_path = os.path.join(
-                WORKTREE_PATH, ".prism_security_change.patch"
-            )
-
-            if status == "added":
-                old_path = "/dev/null"
-                new_path = f"b/{filename}"
-            elif status == "removed":
-                old_path = f"a/{filename}"
-                new_path = "/dev/null"
-            else:
-                old_path = f"a/{filename}"
-                new_path = f"b/{filename}"
-
-            patch_content = (
-                f"diff --git a/{filename} b/{filename}\n"
-                f"--- {old_path}\n"
-                f"+++ {new_path}\n"
-                f"{patch.rstrip()}\n"
-            )
-
-            try:
-                with open(
-                    patch_path, "w", encoding="utf-8"
-                ) as f:
-                    f.write(patch_content)
-
-                subprocess.run(
-                    [
-                        "git", "-C", WORKTREE_PATH,
-                        "apply", "--check", patch_path
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-
-                subprocess.run(
-                    [
-                        "git", "-C", WORKTREE_PATH,
-                        "apply", patch_path
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-
-            finally:
-                if os.path.exists(patch_path):
-                    os.remove(patch_path)
-
-            merged_file_path = os.path.join(
-                WORKTREE_PATH, filename
-            )
+            merged_file_path = os.path.join(worktree_path, filename)
 
             if os.path.isfile(merged_file_path):
-                with open(
-                    merged_file_path, "r", encoding="utf-8"
-                ) as f:
+                with open(merged_file_path, "r", encoding="utf-8") as f:
                     merged_code = f.read()
             elif status == "removed":
                 merged_code = ""
@@ -351,20 +291,21 @@ def Single_File_Security_Test(state: PR_State):
                     "vulnerability": "Resulting file not found",
                     "severity_score": 0,
                     "possible_lines": [],
-                    "explanation": "The patched file could not be read.",
-                    "suggested_fix": "Check the patch and file status."
+                    "explanation": "The file was not found in the merged worktree.",
+                    "suggested_fix": "Verify the worktree and filename."
                 })
                 continue
 
-            if not merged_code:
+            if merged_code:
+                semgrep_result = run_semgrep_security(
+                    worktree_path=worktree_path,
+                    filename=filename
+                )
+            else:
                 semgrep_result = {
                     "status": "completed",
                     "findings": []
                 }
-            else:
-                semgrep_result = run_semgrep_security(
-                    merged_file_path
-                )
 
             if semgrep_result["status"] != "completed":
                 single_file_security_test_results.append({
@@ -376,7 +317,7 @@ def Single_File_Security_Test(state: PR_State):
                     "explanation": semgrep_result.get(
                         "error", "Unknown Semgrep error."
                     ),
-                    "suggested_fix": "Check Semgrep installation and configuration."
+                    "suggested_fix": "Check Docker, Semgrep, and its configuration."
                 })
                 continue
 
@@ -393,32 +334,6 @@ def Single_File_Security_Test(state: PR_State):
                 "semgrep_findings": semgrep_result["findings"]
             })
 
-        except subprocess.CalledProcessError as e:
-            single_file_security_test_results.append({
-                "filename": filename,
-                "status": "failed",
-                "vulnerability": "Git operation or patch application failed",
-                "severity_score": 0,
-                "possible_lines": [],
-                "explanation": e.stderr or str(e),
-                "suggested_fix": "Verify the base commit and PR patch."
-            })
-
-        except (
-            OSError,
-            ValueError,
-            json.JSONDecodeError
-        ) as e:
-            single_file_security_test_results.append({
-                "filename": filename,
-                "status": "failed",
-                "vulnerability": "Security analysis incomplete",
-                "severity_score": 0,
-                "possible_lines": [],
-                "explanation": str(e),
-                "suggested_fix": "Check the file, patch, and LLM JSON response."
-            })
-
         except Exception as e:
             single_file_security_test_results.append({
                 "filename": filename,
@@ -431,7 +346,5 @@ def Single_File_Security_Test(state: PR_State):
             })
 
     return {
-        "single_file_security_test_Results": (
-            single_file_security_test_results
-        )
+        "single_file_security_test_Results": single_file_security_test_results
     }
